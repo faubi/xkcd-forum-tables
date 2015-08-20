@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Xkcd Forums Tables
-// @version      0.2.4
+// @version      1.0.0
 // @description  Adds bbcode tables to the xkcd forums
 // @author       faubiguy
 // @match        http://forums.xkcd.com/*
@@ -10,7 +10,9 @@
 // @grant        none
 // ==/UserScript==
 
-debug_on = false;
+tableVersion = '1'
+
+debug_on = true;
 
 function debug(str){
     if (debug_on){
@@ -68,6 +70,37 @@ function arrayToCSV(arr) {
     return lines.join('\n');
 }
 
+//attribution: http://stackoverflow.com/a/13419367/3893398
+function parseQueryString(qstr)
+{
+  var query = {};
+  var a = qstr.split('&');
+  for (var i = 0; i < a.length; i++)
+  {
+    var b = a[i].split('=');
+	var value = decodeURIComponent(b[1])
+	if (value == 'true') {
+		value = true
+	} else if (value == 'false') {
+		value = false
+	}
+    query[decodeURIComponent(b[0])] = value;
+  }
+
+  return query;
+}
+
+//attribution: http://stackoverflow.com/a/15096979/3893398
+function objectToQueryString(obj) {
+   var str = [];
+   for(var p in obj){
+       if (obj.hasOwnProperty(p)) {
+           str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
+       }
+   }
+   return str.join("&");
+}
+
 var defaultOptions = {'header': true};
 var defaultKeys = Object.keys(defaultOptions);
 
@@ -96,7 +129,7 @@ function tableToOutputBBCode(table) {
         lines = lines.slice(0,1).concat([''],lines.slice(1));
     }
     table.options.widths = widths;
-    var result = '[url=http://faubi/' + (table.csv ? 'csvtable' : 'table') + '/' + escape(JSON.stringify(table.options)) + '][s][/s][/url][code]' +  lines.join('\n').replace(/\[\/code]/g,'[\\code]') + '[/code]';
+    var result = '[url=http://faubi/' + (table.csv ? 'csvtable' : 'table') + '.v' + tableVersion + '/?' + objectToQueryString(table.options) + '][s][/s][/url][code]' +  lines.join('\n').replace(/\[\/code]/g,'[\\code]') + '[/code]';
     debug(result);
     return result;
 }
@@ -129,32 +162,27 @@ function tableToInputBBCode(table){
 }
 
 inputBBCodeRegex = /\[(table|csvtable)(?:=(.*?))?]([\s\S]*?)\[\/\1]/g; //groups: type, options, contents
-outputBBCodeRegex = /\[url=http:\/\/faubi\/(table|csvtable)\/(.*?)]\[s]\[\/s]\[\/url]\[code]([\s\S]*?)\[\/code]/g; //groups: type, options, contents
-hrefRegex = /http:\/\/faubi\/(table|csvtable)\/(.*)/; //groups: type, options
+outputBBCodeRegex = /\[url=http:\/\/faubi\/(table|csvtable)(?:.v([\0-9]+))?\/(.*?)]\[s]\[\/s]\[\/url]\[code]([\s\S]*?)\[\/code]/g; //groups: type, version, options, contents
+hrefRegex = /http:\/\/faubi\/(table|csvtable)(?:.v([\0-9]+))?\/(.*)/; //groups: type, version, options
 tableRowRegex = /\s*\[tr]([\s\S]*?)\[\/tr]\s*/g; //groups: cells
 tableCellRegex = /\s*\[td]([\s\S]*?)\[\/td]\s*/g; //groups: cells
 codeRegex = /\[code].*?\[\/code]/g; //groups: cells
 
 function outputBBCodeToTable(match){
-    return toTable(match[1], unescape(match[2]), match[3], 'output');
+	debug('outputBBCodeToTable: ' + [match[1], match[2], match[3], match[4]].join(', '))
+    return toTable(match[1], getOptionsByVersion(match[3], match[2]), match[4], 'output');
 }
 
 function inputBBCodeToTable(match){
-    return toTable(match[1], match[2], match[3], 'input');
+	debug('inputBBCodeToTable: ' + [match[1], match[2], match[3]].join(', '))
+    return toTable(match[1], getOptionsFromJSON(match[2]), match[3], 'input');
 }
 
 function toTable(type, options, contents, mode){
     debug('toTable: '+JSON.stringify({'type':type,'options':options,'contents':contents,'mode':mode}));
     var table = {};
     table.csv = type == 'csvtable';
-    try{
-        table.options = JSON.parse(options);
-    } catch (e) {
-        table.options = {};
-    }
-    if (typeof(table.options) != 'object'){
-        table.options = {}
-    }
+	table.options = options
     if (mode=='input' && table.csv){
         if (contents[0] === '\n') {
             contents = contents.substr(1);
@@ -173,7 +201,7 @@ function toTable(type, options, contents, mode){
             table.array.push(row);
             rowMatch = tableRowRegex.exec(contents);
         }
-    } else {
+    } else { //mode=='output'
         table.array = textTableToArray(contents, table.options);
     }
     delete table.options.widths;
@@ -203,6 +231,41 @@ function textTableToArray(text, options) {
     }
     return array;
 }
+
+function getOptionsFromJSON(jsonString) {
+	try {
+		var options = JSON.parse(unescape(jsonString));
+		if (typeof(options) == 'object') {
+			return options;
+		} else {
+			return {};
+		}
+	} catch (e) {
+		return {};
+	}
+}
+
+function getOptionsByVersion(optionString, version) {
+	if (typeof(version) == 'string') {
+		version = parseInt(version)
+	}
+	debug('getOptionsByVersion: ' + optionString + ', ' + version)
+    switch (version) {
+		case 0:
+			return getOptionsFromJSON(optionString);
+			break;
+		case 1:
+			var options = parseQueryString(optionString.substr(1));
+			if (options.widths) {
+				options.widths = options.widths.split(',').map(function(n){return parseInt(n,10)})
+			}
+			return options
+			break;
+		default:
+			return {};
+	}
+}
+	
 
 function replaceTable(string, regex, func, nmfunc){
     func = func || function(x){return x}
@@ -245,7 +308,9 @@ for (var i = 0; i < linksList.length; i++){
     if (!hrefMatch){
         continue;
     }
-    var table = toTable(hrefMatch[1], unescape(hrefMatch[2]), text, 'output');
+    var version = hrefMatch[2] ? parseInt(hrefMatch[2]) : 0;
+    var options = getOptionsByVersion(hrefMatch[3], version)
+    var table = toTable(hrefMatch[1], options, text, 'output');
     var htmlTable = document.createElement('table');
     htmlTable.classList.add('display-table');
     for (var rowNum = 0; rowNum < table.array.length; rowNum++){
