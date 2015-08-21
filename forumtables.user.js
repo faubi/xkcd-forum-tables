@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Xkcd Forums Tables
-// @version      1.0.0
+// @version      1.0.1
 // @description  Adds bbcode tables to the xkcd forums
 // @author       faubiguy
 // @match        http://forums.xkcd.com/*
@@ -312,7 +312,7 @@ for (var i = 0; i < linksList.length; i++){
     var options = getOptionsByVersion(hrefMatch[3], version)
     var table = toTable(hrefMatch[1], options, text, 'output');
     var htmlTable = document.createElement('table');
-    htmlTable.classList.add('display-table');
+    htmlTable.classList.add('faubi-table');
     for (var rowNum = 0; rowNum < table.array.length; rowNum++){
         var row = table.array[rowNum];
         var tr = document.createElement('tr');
@@ -332,5 +332,5 @@ for (var i = 0; i < linksList.length; i++){
     link.style.display = 'none';
 }
 var style = document.createElement('style');
-style.textContent = '.display-table{border: 1px solid gray; border-collapse: collapse} td,th{border: 1px solid gray; padding-left: 2px; padding-right: 2px; height: 100%;}';
+style.textContent = '.faubi-table{border: 1px solid gray; border-collapse: collapse} .faubi-table td, .faubi-table th{border: 1px solid gray; padding-left: 2px; padding-right: 2px; height: 100%;}';
 document.head.appendChild(style);
